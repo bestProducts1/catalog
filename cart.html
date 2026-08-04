@@ -761,9 +761,13 @@
         msg += `----------------------------\n`;
 
         cart.forEach((item) => {
-          // 这里不需要手动处理 &，因为最后会统一 encode
-          msg += `${item.caption} x *${item.quantity}*\n\n`;
-        });
+  // 兼容历史缓存：优先取 item.id，若无则从 window.perfumeDB 匹配
+  const dbProduct = (window.perfumeDB || []).find(p => p.name === item.name);
+  const productId = item.id || (dbProduct ? dbProduct.id : '');
+  const idStr = productId ? `[${productId}] ` : '';
+
+  msg += `${idStr}${item.caption} x *${item.quantity}*\n\n`;
+});
 
         msg += `----------------------------\n`;
         msg += `LV Quantity: ${lvCount}\n`;
