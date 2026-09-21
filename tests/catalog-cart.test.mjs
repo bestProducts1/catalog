@@ -68,8 +68,8 @@ function createContext(page = 'index.html') {
       (documentListeners.get(type) || []).forEach((handler) => handler(event));
     },
     setCart: (cart) => {
-      memory.set('bestProducts1CatalogCartResetV2', 'done');
-      memory.set('bestProducts1CatalogCartV2', JSON.stringify(cart));
+      memory.set('bestProducts1SharedCartResetV3', 'done');
+      memory.set('bestProducts1SharedCartV3', JSON.stringify(cart));
     },
     cart: () => plain(sandbox.readStoredCart()),
   };
@@ -145,22 +145,27 @@ test('warehouse labels normalize and malformed storage cannot crash a cart', () 
   const { sandbox: s, memory } = createContext();
   assert.equal(s.reconcileCart([item({ warehouse: 'tx Warehouse' })], [product()]).items.length, 1);
   for (const raw of ['broken', '{}', 'null']) {
-    memory.set('bestProducts1CatalogCartResetV2', 'done');
-    memory.set('bestProducts1CatalogCartV2', raw);
+    memory.set('bestProducts1SharedCartResetV3', 'done');
+    memory.set('bestProducts1SharedCartV3', raw);
     assert.deepEqual(plain(s.readStoredCart()), []);
   }
 });
 
-test('catalog storage clears old carts once and keeps later official-SKU carts', () => {
+test('catalog storage clears old carts once and then uses the shared official-SKU cart', () => {
   const { sandbox: s, memory } = createContext();
   memory.set('perfumeCart', JSON.stringify([item({ name: 'B02', warehouse: '' })]));
   memory.set('bestProducts1CatalogCartV1', JSON.stringify([item()]));
+  memory.set('bestProducts1CatalogCartV2', JSON.stringify([item()]));
+  memory.set('bestProducts1SkuCartV2', JSON.stringify([item()]));
   assert.deepEqual(plain(s.readStoredCart()), []);
   assert.equal(memory.has('perfumeCart'), false);
   assert.equal(memory.has('bestProducts1CatalogCartV1'), false);
+  assert.equal(memory.has('bestProducts1CatalogCartV2'), false);
+  assert.equal(memory.has('bestProducts1SkuCartV2'), false);
 
   s.writeStoredCart([item()]);
   assert.deepEqual(plain(s.readStoredCart().map((entry) => entry.name)), ['TX-A055']);
+  assert.equal(JSON.parse(memory.get('bestProducts1SharedCartV3'))[0].name, 'TX-A055');
 });
 
 test('search supports accents, volume, aliases and both warehouses', () => {
