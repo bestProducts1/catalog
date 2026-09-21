@@ -67,7 +67,10 @@ function createContext(page = 'index.html') {
     dispatchDocument(type, event) {
       (documentListeners.get(type) || []).forEach((handler) => handler(event));
     },
-    setCart: (cart) => memory.set('bestProducts1CatalogCartV1', JSON.stringify(cart)),
+    setCart: (cart) => {
+      memory.set('bestProducts1CatalogCartResetV2', 'done');
+      memory.set('bestProducts1CatalogCartV2', JSON.stringify(cart));
+    },
     cart: () => plain(sandbox.readStoredCart()),
   };
 }
@@ -142,65 +145,22 @@ test('warehouse labels normalize and malformed storage cannot crash a cart', () 
   const { sandbox: s, memory } = createContext();
   assert.equal(s.reconcileCart([item({ warehouse: 'tx Warehouse' })], [product()]).items.length, 1);
   for (const raw of ['broken', '{}', 'null']) {
-    memory.set('bestProducts1CatalogCartV1', raw);
+    memory.set('bestProducts1CatalogCartResetV2', 'done');
+    memory.set('bestProducts1CatalogCartV2', raw);
     assert.deepEqual(plain(s.readStoredCart()), []);
   }
 });
 
-test('catalog storage imports only catalog items from the formerly shared cart', () => {
+test('catalog storage clears old carts once and keeps later official-SKU carts', () => {
   const { sandbox: s, memory } = createContext();
-  memory.set('perfumeCart', JSON.stringify([
-    item({ name: 'IL-B016', warehouse: 'IL' }),
-    item({ name: 'B02', warehouse: 'IL', internalId: 'B02', orderSku: 'IL-B016' }),
-  ]));
-  assert.deepEqual(plain(s.readStoredCart().map((entry) => entry.name)), ['IL-B016']);
-  assert.deepEqual(
-    JSON.parse(memory.get('bestProducts1CatalogCartV1')).map((entry) => entry.name),
-    ['IL-B016'],
-  );
-});
+  memory.set('perfumeCart', JSON.stringify([item({ name: 'B02', warehouse: '' })]));
+  memory.set('bestProducts1CatalogCartV1', JSON.stringify([item()]));
+  assert.deepEqual(plain(s.readStoredCart()), []);
+  assert.equal(memory.has('perfumeCart'), false);
+  assert.equal(memory.has('bestProducts1CatalogCartV1'), false);
 
-test('legacy carts migrate old IL and TX IDs using their saved product images', () => {
-  const { sandbox: s } = createContext();
-  const products = [
-    product({
-      id: 'IL-B016', warehouse: 'IL', name: 'Valentino Donna Born in Roma',
-      price: 38, stock: 59, img: 'https://example.test/images/perfume2.webp',
-    }),
-    product({
-      id: 'TX-A002', warehouse: 'TX', name: 'Donna Born in Roma Eau de Parfum',
-      price: 38, stock: 48, img: 'https://example.test/perfume301.webp',
-    }),
-  ];
-  const result = s.reconcileCart([
-    item({
-      name: 'B02', warehouse: '', caption: 'B02 - Valentino Donna Born in Roma (100ml)',
-      price: 38, img: 'images/perfume2.webp',
-    }),
-    item({
-      name: 'B301', warehouse: '', caption: 'B301 - Donna Born in Roma Eau de Parfum (100ml)',
-      price: 38, img: 'images/perfume301.webp',
-    }),
-  ], products);
-  assert.deepEqual(plain(result.items.map(({ name, warehouse }) => ({ name, warehouse }))), [
-    { name: 'IL-B016', warehouse: 'IL' },
-    { name: 'TX-A002', warehouse: 'TX' },
-  ]);
-  assert.equal(result.changes.length, 0);
-});
-
-test('legacy matching never changes an explicitly selected warehouse', () => {
-  const { sandbox: s } = createContext();
-  const result = s.reconcileCart([
-    item({ name: 'B02', warehouse: 'IL', img: 'images/perfume2.webp' }),
-  ], [
-    product({
-      id: 'TX-A099', warehouse: 'TX', name: 'Legacy Match',
-      img: 'https://example.test/images/perfume2.webp',
-    }),
-  ]);
-  assert.equal(result.items.length, 0);
-  assert.equal(result.changes.length, 1);
+  s.writeStoredCart([item()]);
+  assert.deepEqual(plain(s.readStoredCart().map((entry) => entry.name)), ['TX-A055']);
 });
 
 test('search supports accents, volume, aliases and both warehouses', () => {

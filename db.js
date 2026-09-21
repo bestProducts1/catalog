@@ -10,8 +10,8 @@ const CACHE_DURATION = 1 * 60 * 1000;
 const PRODUCT_CACHE_KEY = "perfumeDB_BestProducts_Catalog_Data_V13";
 const PRODUCT_TIME_KEY = "perfumeDB_BestProducts_Catalog_Time_V13";
 const PRODUCT_FALLBACK_KEY = "perfumeDB_BestProducts_Catalog_Last_Valid_Data_V13";
-const CART_STORAGE_KEY = "bestProducts1CatalogCartV1";
-const LEGACY_CART_STORAGE_KEY = "perfumeCart";
+const CART_STORAGE_KEY = "bestProducts1CatalogCartV2";
+const CART_RESET_KEY = "bestProducts1CatalogCartResetV2";
 const MIN_ORDER_STOCK = 19;
 let latestProductRequest = null;
 
@@ -126,31 +126,6 @@ function cartStockKey(sku, warehouse) {
   return `${String(sku || "").trim().toUpperCase()}::${code}`;
 }
 
-function normalizeCartImageKey(value) {
-  const path = String(value || "")
-    .trim()
-    .split(/[?#]/, 1)[0]
-    .replace(/\\/g, "/");
-  return path.split("/").pop().toLowerCase();
-}
-
-function normalizeCartProductName(value) {
-  return String(value || "")
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "");
-}
-
-function getLegacyCartProductName(item) {
-  let caption = String(item?.caption || "").trim();
-  const storedId = String(item?.name || "").trim();
-  if (storedId && caption.toUpperCase().startsWith(`${storedId.toUpperCase()} -`)) {
-    caption = caption.slice(storedId.length + 2).trim();
-  }
-  return caption.replace(/\s*\([^)]*\)\s*$/, "").trim();
-}
-
 function parseStoredCart(rawCart) {
   try {
     const cart = JSON.parse(rawCart || "[]");
@@ -160,71 +135,36 @@ function parseStoredCart(rawCart) {
   }
 }
 
-function isSkuToolCartItem(item) {
-  return item?.cartSource === "sku-tool" ||
-    ["internalId", "orderSku", "sku", "sku2", "supplier", "cost", "tier"]
-      .some((key) => Object.prototype.hasOwnProperty.call(item || {}, key));
+function resetCatalogCartOnce() {
+  if (localStorage.getItem(CART_RESET_KEY) === "done") return;
+  localStorage.removeItem("perfumeCart");
+  localStorage.removeItem("bestProducts1CatalogCartV1");
+  localStorage.removeItem(CART_STORAGE_KEY);
+  localStorage.setItem(CART_RESET_KEY, "done");
 }
 
 function readStoredCart() {
-  const storedCart = localStorage.getItem(CART_STORAGE_KEY);
-  if (storedCart !== null) return parseStoredCart(storedCart);
-
-  // The SKU converter historically used the same origin and storage key.
-  // Import only catalog-shaped legacy entries into this site's private cart.
-  const legacyCart = parseStoredCart(localStorage.getItem(LEGACY_CART_STORAGE_KEY));
-  const catalogCart = legacyCart.filter((item) => !isSkuToolCartItem(item));
-  localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(catalogCart));
-  return catalogCart;
+  resetCatalogCartOnce();
+  return parseStoredCart(localStorage.getItem(CART_STORAGE_KEY));
 }
 
 function writeStoredCart(items) {
+  resetCatalogCartOnce();
   const cart = Array.isArray(items) ? items : [];
   localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
 }
 
 function clearStoredCart() {
+  resetCatalogCartOnce();
   localStorage.removeItem(CART_STORAGE_KEY);
 }
 
 function getCartProduct(item, products = window.perfumeDB) {
   const key = cartStockKey(item.name, item.warehouse);
   const catalog = Array.isArray(products) ? products : [];
-  const directMatch = catalog.find(
+  return catalog.find(
     (product) => cartStockKey(product.id, product.warehouse) === key,
   );
-  if (directMatch) return directMatch;
-
-  // Carts saved before the warehouse migration contain IDs such as B02 or
-  // B301. Match those entries by the image/name that was saved with the cart,
-  // but never move a cart item away from an explicitly selected warehouse.
-  const selectedWarehouse = String(item?.warehouse || "")
-    .trim()
-    .toUpperCase()
-    .replace(/\s+WAREHOUSE$/, "")
-    .trim();
-  const candidates = selectedWarehouse
-    ? catalog.filter(
-        (product) =>
-          String(product.warehouse || "").trim().toUpperCase() === selectedWarehouse,
-      )
-    : catalog;
-  const imageKey = normalizeCartImageKey(item?.img);
-  if (imageKey) {
-    const imageMatches = candidates.filter(
-      (product) => normalizeCartImageKey(product.img) === imageKey,
-    );
-    if (imageMatches.length === 1) return imageMatches[0];
-  }
-
-  const productName = normalizeCartProductName(getLegacyCartProductName(item));
-  if (productName) {
-    const nameMatches = candidates.filter(
-      (product) => normalizeCartProductName(product.name) === productName,
-    );
-    if (nameMatches.length === 1) return nameMatches[0];
-  }
-  return undefined;
 }
 
 function getOrderStockLimit(product) {
