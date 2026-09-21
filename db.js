@@ -124,6 +124,31 @@ function cartStockKey(sku, warehouse) {
   return `${String(sku || "").trim().toUpperCase()}::${code}`;
 }
 
+function normalizeCartImageKey(value) {
+  const path = String(value || "")
+    .trim()
+    .split(/[?#]/, 1)[0]
+    .replace(/\\/g, "/");
+  return path.split("/").pop().toLowerCase();
+}
+
+function normalizeCartProductName(value) {
+  return String(value || "")
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function getLegacyCartProductName(item) {
+  let caption = String(item?.caption || "").trim();
+  const storedId = String(item?.name || "").trim();
+  if (storedId && caption.toUpperCase().startsWith(`${storedId.toUpperCase()} -`)) {
+    caption = caption.slice(storedId.length + 2).trim();
+  }
+  return caption.replace(/\s*\([^)]*\)\s*$/, "").trim();
+}
+
 function readStoredCart() {
   try {
     const cart = JSON.parse(localStorage.getItem("perfumeCart") || "[]");
@@ -135,7 +160,42 @@ function readStoredCart() {
 
 function getCartProduct(item, products = window.perfumeDB) {
   const key = cartStockKey(item.name, item.warehouse);
-  return (products || []).find((p) => cartStockKey(p.id, p.warehouse) === key);
+  const catalog = Array.isArray(products) ? products : [];
+  const directMatch = catalog.find(
+    (product) => cartStockKey(product.id, product.warehouse) === key,
+  );
+  if (directMatch) return directMatch;
+
+  // Carts saved before the warehouse migration contain IDs such as B02 or
+  // B301. Match those entries by the image/name that was saved with the cart,
+  // but never move a cart item away from an explicitly selected warehouse.
+  const selectedWarehouse = String(item?.warehouse || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+WAREHOUSE$/, "")
+    .trim();
+  const candidates = selectedWarehouse
+    ? catalog.filter(
+        (product) =>
+          String(product.warehouse || "").trim().toUpperCase() === selectedWarehouse,
+      )
+    : catalog;
+  const imageKey = normalizeCartImageKey(item?.img);
+  if (imageKey) {
+    const imageMatches = candidates.filter(
+      (product) => normalizeCartImageKey(product.img) === imageKey,
+    );
+    if (imageMatches.length === 1) return imageMatches[0];
+  }
+
+  const productName = normalizeCartProductName(getLegacyCartProductName(item));
+  if (productName) {
+    const nameMatches = candidates.filter(
+      (product) => normalizeCartProductName(product.name) === productName,
+    );
+    if (nameMatches.length === 1) return nameMatches[0];
+  }
+  return undefined;
 }
 
 function getOrderStockLimit(product) {

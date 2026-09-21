@@ -147,6 +147,49 @@ test('warehouse labels normalize and malformed storage cannot crash a cart', () 
   }
 });
 
+test('legacy carts migrate old IL and TX IDs using their saved product images', () => {
+  const { sandbox: s } = createContext();
+  const products = [
+    product({
+      id: 'IL-B016', warehouse: 'IL', name: 'Valentino Donna Born in Roma',
+      price: 38, stock: 59, img: 'https://example.test/images/perfume2.webp',
+    }),
+    product({
+      id: 'TX-A002', warehouse: 'TX', name: 'Donna Born in Roma Eau de Parfum',
+      price: 38, stock: 48, img: 'https://example.test/perfume301.webp',
+    }),
+  ];
+  const result = s.reconcileCart([
+    item({
+      name: 'B02', warehouse: '', caption: 'B02 - Valentino Donna Born in Roma (100ml)',
+      price: 38, img: 'images/perfume2.webp',
+    }),
+    item({
+      name: 'B301', warehouse: '', caption: 'B301 - Donna Born in Roma Eau de Parfum (100ml)',
+      price: 38, img: 'images/perfume301.webp',
+    }),
+  ], products);
+  assert.deepEqual(plain(result.items.map(({ name, warehouse }) => ({ name, warehouse }))), [
+    { name: 'IL-B016', warehouse: 'IL' },
+    { name: 'TX-A002', warehouse: 'TX' },
+  ]);
+  assert.equal(result.changes.length, 0);
+});
+
+test('legacy matching never changes an explicitly selected warehouse', () => {
+  const { sandbox: s } = createContext();
+  const result = s.reconcileCart([
+    item({ name: 'B02', warehouse: 'IL', img: 'images/perfume2.webp' }),
+  ], [
+    product({
+      id: 'TX-A099', warehouse: 'TX', name: 'Legacy Match',
+      img: 'https://example.test/images/perfume2.webp',
+    }),
+  ]);
+  assert.equal(result.items.length, 0);
+  assert.equal(result.changes.length, 1);
+});
+
 test('search supports accents, volume, aliases and both warehouses', () => {
   const { sandbox: s } = createContext();
   const products = [
