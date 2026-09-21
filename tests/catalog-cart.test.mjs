@@ -67,7 +67,7 @@ function createContext(page = 'index.html') {
     dispatchDocument(type, event) {
       (documentListeners.get(type) || []).forEach((handler) => handler(event));
     },
-    setCart: (cart) => memory.set('perfumeCart', JSON.stringify(cart)),
+    setCart: (cart) => memory.set('bestProducts1CatalogCartV1', JSON.stringify(cart)),
     cart: () => plain(sandbox.readStoredCart()),
   };
 }
@@ -142,9 +142,22 @@ test('warehouse labels normalize and malformed storage cannot crash a cart', () 
   const { sandbox: s, memory } = createContext();
   assert.equal(s.reconcileCart([item({ warehouse: 'tx Warehouse' })], [product()]).items.length, 1);
   for (const raw of ['broken', '{}', 'null']) {
-    memory.set('perfumeCart', raw);
+    memory.set('bestProducts1CatalogCartV1', raw);
     assert.deepEqual(plain(s.readStoredCart()), []);
   }
+});
+
+test('catalog storage imports only catalog items from the formerly shared cart', () => {
+  const { sandbox: s, memory } = createContext();
+  memory.set('perfumeCart', JSON.stringify([
+    item({ name: 'IL-B016', warehouse: 'IL' }),
+    item({ name: 'B02', warehouse: 'IL', internalId: 'B02', orderSku: 'IL-B016' }),
+  ]));
+  assert.deepEqual(plain(s.readStoredCart().map((entry) => entry.name)), ['IL-B016']);
+  assert.deepEqual(
+    JSON.parse(memory.get('bestProducts1CatalogCartV1')).map((entry) => entry.name),
+    ['IL-B016'],
+  );
 });
 
 test('legacy carts migrate old IL and TX IDs using their saved product images', () => {

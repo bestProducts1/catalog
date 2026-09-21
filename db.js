@@ -10,6 +10,8 @@ const CACHE_DURATION = 1 * 60 * 1000;
 const PRODUCT_CACHE_KEY = "perfumeDB_BestProducts_Catalog_Data_V13";
 const PRODUCT_TIME_KEY = "perfumeDB_BestProducts_Catalog_Time_V13";
 const PRODUCT_FALLBACK_KEY = "perfumeDB_BestProducts_Catalog_Last_Valid_Data_V13";
+const CART_STORAGE_KEY = "bestProducts1CatalogCartV1";
+const LEGACY_CART_STORAGE_KEY = "perfumeCart";
 const MIN_ORDER_STOCK = 19;
 let latestProductRequest = null;
 
@@ -149,13 +151,40 @@ function getLegacyCartProductName(item) {
   return caption.replace(/\s*\([^)]*\)\s*$/, "").trim();
 }
 
-function readStoredCart() {
+function parseStoredCart(rawCart) {
   try {
-    const cart = JSON.parse(localStorage.getItem("perfumeCart") || "[]");
+    const cart = JSON.parse(rawCart || "[]");
     return Array.isArray(cart) ? cart.filter((item) => item && typeof item === "object") : [];
   } catch (error) {
     return [];
   }
+}
+
+function isSkuToolCartItem(item) {
+  return item?.cartSource === "sku-tool" ||
+    ["internalId", "orderSku", "sku", "sku2", "supplier", "cost", "tier"]
+      .some((key) => Object.prototype.hasOwnProperty.call(item || {}, key));
+}
+
+function readStoredCart() {
+  const storedCart = localStorage.getItem(CART_STORAGE_KEY);
+  if (storedCart !== null) return parseStoredCart(storedCart);
+
+  // The SKU converter historically used the same origin and storage key.
+  // Import only catalog-shaped legacy entries into this site's private cart.
+  const legacyCart = parseStoredCart(localStorage.getItem(LEGACY_CART_STORAGE_KEY));
+  const catalogCart = legacyCart.filter((item) => !isSkuToolCartItem(item));
+  localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(catalogCart));
+  return catalogCart;
+}
+
+function writeStoredCart(items) {
+  const cart = Array.isArray(items) ? items : [];
+  localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+}
+
+function clearStoredCart() {
+  localStorage.removeItem(CART_STORAGE_KEY);
 }
 
 function getCartProduct(item, products = window.perfumeDB) {
