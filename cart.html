@@ -576,10 +576,10 @@
         </div>
         <div class="summary-row shipping-text">
           <span>Shipping</span>
-          <span id="shipping-amount">$0.00</span>
+          <span id="shipping-amount">Calculated Separately</span>
         </div>
         <div class="summary-row summary-total">
-          <span>Total</span>
+          <span>Total (excl. shipping)</span>
           <span id="total-price">$0.00</span>
         </div>
 
@@ -611,7 +611,7 @@
           Volume Discounts
         </h3>
         <p style="margin:8px 0 0; color:#7b6020; font-size:0.85rem; font-weight:700;">
-          FREE shipping on every order
+          Shipping: Calculated Separately
         </p>
         <div id="tiers-list" class="tiers-grid"></div>
       </div>
@@ -674,7 +674,7 @@
       </div>
     </div>
 
-    <script src="db.js?v=17"></script>
+    <script src="db.js?v=18"></script>
     <script>
       // ================= UI Logic =================
       function toggleSidebar() {
@@ -743,18 +743,7 @@
         return `${code} Warehouse`;
       }
 
-      const tiers = [
-        { min: 1, max: 1, percent: 0 },
-        { min: 2, max: 2, percent: 0.03 },
-        { min: 3, max: 4, percent: 0.05 },
-        { min: 5, max: 9, percent: 0.08 },
-        { min: 10, max: 19, percent: 0.14 },
-        { min: 20, max: 29, percent: 0.24 },
-        { min: 30, max: 49, percent: 0.26 },
-        { min: 50, max: 79, percent: 0.29 },
-        { min: 80, max: 100, percent: 0.32 },
-        { min: 101, max: Infinity, percent: 0.35 },
-      ];
+      const tiers = CATALOG_DISCOUNT_TIERS;
 
       function loadCart() {
         return readStoredCart();
@@ -882,11 +871,8 @@
         summaryEls.other.textContent = other;
         summaryEls.totalQty.textContent = totalQty;
         summaryEls.subtotal.textContent = `$${subtotal.toFixed(2)}`;
-        summaryEls.discount.textContent = `-$${discountVal.toFixed(2)} (${(
-          tier.percent * 100
-        ).toFixed(0)}%)`;
-        summaryEls.shipping.textContent =
-          shipping === 0 ? "FREE" : `$${shipping.toFixed(2)}`;
+        summaryEls.discount.textContent = `-$${discountVal.toFixed(2)} (${formatDiscountPercent(tier.percent)}%)`;
+        summaryEls.shipping.textContent = SHIPPING_LABEL;
         summaryEls.total.textContent = `$${finalTotal.toFixed(2)}`;
 
         // Upsell Logic
@@ -895,9 +881,7 @@
           const needed = nextTier.min - totalQty;
           if (needed <= 5) {
             summaryEls.upsell.style.display = "block";
-            summaryEls.upsell.textContent = `Add ${needed} more items to get ${(
-              nextTier.percent * 100
-            ).toFixed(0)}% Off!`;
+            summaryEls.upsell.textContent = `Add ${needed} more items to get ${formatDiscountPercent(nextTier.percent)}% Off!`;
           } else {
             summaryEls.upsell.style.display = "none";
           }
@@ -912,9 +896,7 @@
               totalQty >= t.min && totalQty <= t.max ? "active" : "";
             const label =
               t.max === Infinity ? `${t.min}+` : `${t.min}-${t.max}`;
-            return `<div class="tier-badge ${active}">${label}: ${(
-              t.percent * 100
-            ).toFixed(0)}%</div>`;
+            return `<div class="tier-badge ${active}">${label}: ${formatDiscountPercent(t.percent)}%</div>`;
           })
           .join("");
       }

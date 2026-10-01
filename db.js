@@ -3,13 +3,20 @@
 // ==========================================
 
 const SHEET_URL =
-  "https://docs.google.com/spreadsheets/d/e/2PACX-1vRFWYImNbJ0ao5z0VDk_VZwhOP1pnY2UZdFuwxtYOvKaNfEX4sInJh7uk-MlRSH9kffdZ5TjzhudLao/pub?gid=1967485424&single=true&output=csv";
+  "https://docs.google.com/spreadsheets/d/e/2PACX-1vSaFTXofUSG63pjWela7csIA57AcA6rqrhb26_p_NKQ73P8ofYD3Ec4JDqGPVEUv6Fe3HWDpsj8ldaE/pub?gid=0&single=true&output=csv";
 
 // 缓存时间 (1分钟)
 const CACHE_DURATION = 1 * 60 * 1000;
-const PRODUCT_CACHE_KEY = "perfumeDB_BestProducts_Catalog_Data_V13";
-const PRODUCT_TIME_KEY = "perfumeDB_BestProducts_Catalog_Time_V13";
-const PRODUCT_FALLBACK_KEY = "perfumeDB_BestProducts_Catalog_Last_Valid_Data_V13";
+const PRODUCT_CACHE_KEY = "perfumeDB_BestProducts_Catalog_Data_V14";
+const PRODUCT_TIME_KEY = "perfumeDB_BestProducts_Catalog_Time_V14";
+const PRODUCT_FALLBACK_KEY = "perfumeDB_BestProducts_Catalog_Last_Valid_Data_V14";
+const CATALOG_DISCOUNT_TIERS = [
+  { min: 1, max: 10, percent: 0 },
+  { min: 11, max: 20, percent: 0.035 },
+  { min: 21, max: 40, percent: 0.08 },
+  { min: 41, max: Infinity, percent: 0.12 },
+];
+const SHIPPING_LABEL = "Calculated Separately";
 const CART_STORAGE_KEY = "bestProducts1SharedCartV3";
 const CART_RESET_KEY = "bestProducts1SharedCartResetV3";
 const MIN_ORDER_STOCK = 19;
@@ -247,7 +254,12 @@ function runPageLogic() {
 }
 
 function getShippingCost(totalQuantity) {
+  // Shipping is quoted separately and is not included in the product total.
   return 0;
+}
+
+function formatDiscountPercent(percent) {
+  return String(Number((Number(percent) * 100).toFixed(2)));
 }
 
 function buildWhatsAppOrderMessage(items, discountTiers) {
@@ -328,9 +340,9 @@ function buildWhatsAppOrderMessage(items, discountTiers) {
   message += `*Total Quantity: ${totalQty} pcs*\n`;
   message += `----------------------------\n`;
   message += `Subtotal: $${subtotal.toFixed(2)}\n`;
-  message += `Discount (${Math.round(discountPercent * 100)}%): -$${discountAmount.toFixed(2)}\n`;
-  message += `Shipping: ${shipping === 0 ? "FREE" : "$" + shipping.toFixed(2)}\n`;
-  message += `*Total Amount:* $${finalTotal.toFixed(2)}`;
+  message += `Discount (${formatDiscountPercent(discountPercent)}%): -$${discountAmount.toFixed(2)}\n`;
+  message += `Shipping: ${SHIPPING_LABEL}\n`;
+  message += `*Total Amount (excl. shipping):* $${finalTotal.toFixed(2)}`;
   return message;
 }
 
@@ -365,7 +377,8 @@ function parseCSV(csvText) {
   if (value || row.length) { row.push(value.trim()); rows.push(row); }
   if (rows.length < 2) return [];
   const headers = rows[0].map((header) => header.trim().toLowerCase());
-  if (new Set(headers).size !== headers.length) throw new Error("Duplicate product columns.");
+  const namedHeaders = headers.filter(Boolean);
+  if (new Set(namedHeaders).size !== namedHeaders.length) throw new Error("Duplicate product columns.");
 
   return rows
     .slice(1)
@@ -375,6 +388,8 @@ function parseCSV(csvText) {
       if (values.length !== headers.length) throw new Error("Incomplete product row.");
 
       headers.forEach((header, index) => {
+        // Unnamed extra sheet columns are not product fields.
+        if (!header) return;
         let val = values[index] || "";
 
         // Keep empty numeric cells empty so pending prices and stock can be

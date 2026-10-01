@@ -1617,8 +1617,8 @@
         <div class="quick-guide-copy">
           <h1 class="quick-guide-title">Build Your Order List</h1>
           <p class="quick-guide-subtitle">
-            Add items to cart. Discounts calculate automatically, and every
-            order ships free.
+            Add items to cart. Discounts calculate automatically.
+            Shipping: Calculated Separately.
           </p>
         </div>
         <div class="curated-shortcuts" aria-label="Featured collections">
@@ -1676,8 +1676,8 @@
         </div>
         <div class="trust-item">
           <div style="font-size: 2rem; margin-bottom: 10px">🚚</div>
-          <h4>Free Shipping</h4>
-          <p>Shipping is free on every order.</p>
+          <h4>Shipping</h4>
+          <p>Calculated Separately.</p>
         </div>
         <div class="trust-item">
           <div style="font-size: 2rem; color: #3498db; margin-bottom: 10px">
@@ -1745,7 +1745,7 @@
 
         <div class="nav-info-col">
           <div class="price-info-row">
-            <span id="bottom-bar-price" class="nav-price">$0</span>
+            <span id="bottom-bar-price" class="nav-price" title="Total excluding shipping">$0</span>
             <span
               id="bottom-bar-original"
               class="nav-original-price"
@@ -1882,7 +1882,7 @@
       </div>
     </div>
 
-    <script src="db.js?v=17"></script>
+    <script src="db.js?v=18"></script>
     <script>
       // ================= Catalog & Checkout Logic =================
       const WHATSAPP_NUMBER = "17253041220";
@@ -1935,18 +1935,7 @@
       const FEATURED_BRANDS_LOWER = FEATURED_BRANDS.map((brand) =>
         normalizeSearchText(brand),
       );
-      const discountTiers = [
-        { min: 1, max: 1, percent: 0 },
-        { min: 2, max: 2, percent: 0.03 },
-        { min: 3, max: 4, percent: 0.05 },
-        { min: 5, max: 9, percent: 0.08 },
-        { min: 10, max: 19, percent: 0.14 },
-        { min: 20, max: 29, percent: 0.24 },
-        { min: 30, max: 49, percent: 0.26 },
-        { min: 50, max: 79, percent: 0.29 },
-        { min: 80, max: 100, percent: 0.32 },
-        { min: 101, max: Infinity, percent: 0.35 },
-      ];
+      const discountTiers = CATALOG_DISCOUNT_TIERS;
       const MIN_DISPLAY_STOCK = 19;
       const MOBILE_BRAND_LIMIT = 10;
       const DEFAULT_PRODUCT_IMAGE =
@@ -2299,7 +2288,10 @@
         if (banner && content) {
           if (qty === 0) {
             banner.className = "ws-banner";
-            content.innerHTML = `<div class="ws-pill">ALL ORDERS <span>FREE SHIPPING</span></div><div class="ws-pill">5+ <span>-8%</span></div><div class="ws-pill">10+ <span>-14%</span></div><div class="ws-pill">20+ <span>-24%</span></div><div class="ws-pill">101+ <span>-35%</span></div>`;
+            content.innerHTML = `<div class="ws-pill">SHIPPING <span>${SHIPPING_LABEL}</span></div>` + discountTiers.map((tier) => {
+              const range = tier.max === Infinity ? `${tier.min}+` : `${tier.min}–${tier.max}`;
+              return `<div class="ws-pill">${range} pcs <span>${formatDiscountPercent(tier.percent)}% OFF</span></div>`;
+            }).join("");
           } else {
             let currentTier =
               discountTiers.find((t) => qty >= t.min && qty <= t.max) ||
@@ -2311,11 +2303,11 @@
                 : null;
 
             let html = `<div class="ws-progress-box">`;
-            let currentOff = Math.round(currentTier.percent * 100);
-            html += `<div class="ws-progress-text">Cart: <strong>${qty}</strong> items • <span class="ws-highlight">FREE shipping</span> • Current: <span class="ws-highlight">-${currentOff}% OFF</span></div>`;
+            let currentOff = formatDiscountPercent(currentTier.percent);
+            html += `<div class="ws-progress-text">Cart: <strong>${qty}</strong> items • Shipping: <span class="ws-highlight">${SHIPPING_LABEL}</span> • Current: <span class="ws-highlight">${currentOff}% OFF</span></div>`;
             if (nextTier) {
               let needMore = nextTier.min - qty;
-              let nextOff = Math.round(nextTier.percent * 100);
+              let nextOff = formatDiscountPercent(nextTier.percent);
               html += `<div style="font-size:0.75rem; color:#ccc;">🔥 Add <strong>${needMore}</strong> more to get <span style="color:#fff;font-weight:bold">-${nextOff}% OFF</span>!</div>`;
             } else {
               html += `<div style="font-size:0.75rem; color:#ffd700;">👑 Maximum Discount Unlocked!</div>`;

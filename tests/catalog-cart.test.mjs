@@ -237,14 +237,53 @@ test('coming soon products are weighted, visible in details and never purchasabl
   assert.equal(s.isComingSoonProduct(pendingPrice), true);
 });
 
-test('shipping is always free and both pages preserve the original discount schedule', () => {
-  const { sandbox: home } = createContext();
-  const { sandbox: cart } = createContext('cart.html');
-  for (const quantity of [0, 1, 2, 3, 101]) assert.equal(home.getShippingCost(quantity), 0);
-  const expected = [0, 0.03, 0.05, 0.08, 0.14, 0.24, 0.26, 0.29, 0.32, 0.35];
-  assert.deepEqual(plain(vm.runInContext('discountTiers.map((tier) => tier.percent)', home)), expected);
-  assert.deepEqual(plain(vm.runInContext('tiers.map((tier) => tier.percent)', cart)), expected);
+test('all discount boundaries agree on the homepage, cart and WhatsApp request', () => {
+  const home = createContext();
+  const cart = createContext('cart.html');
+  for (const [quantity, percent] of [[1, 0], [10, 0], [11, 0.035], [20, 0.035], [21, 0.08], [40, 0.08], [41, 0.12], [80, 0.12], [81, 0.12], [101, 0.12]]) {
+    const items = [item({ price: 100, quantity })];
+    const amount = (100 * quantity * (1 - percent)).toFixed(2);
+    const percentLabel = Number((percent * 100).toFixed(2));
+    home.setCart(items);
+    home.sandbox.loadCart();
+    assert.equal(home.element('bottom-bar-price').textContent, `$${amount}`);
+    const summary = home.sandbox.getCartOrderSummary();
+    assert.equal(summary.discountPercent, percent);
+    cart.sandbox.calculateTotals(items);
+    assert.equal(cart.element('total-price').textContent, `$${amount}`);
+    assert.ok(cart.element('discount-amount').textContent.includes(`(${percentLabel}%)`));
+    assert.equal(cart.element('shipping-amount').textContent, 'Calculated Separately');
+    const message = home.sandbox.buildWhatsAppOrderMessage(items, vm.runInContext('discountTiers', home.sandbox));
+    assert.ok(message.includes(`Discount (${percentLabel}%):`));
+    assert.ok(message.includes(`Total Amount (excl. shipping):* $${amount}`));
+    assert.match(message, /Shipping: Calculated Separately/);
+    assert.doesNotMatch(message, /FREE/);
+  }
+  assert.match(home.element('ws-content').innerHTML, /Calculated Separately/);
+  for (const page of ['index.html', 'cart.html']) {
+    assert.doesNotMatch(source(page), /free shipping|shipping.{0,30}free|ships free/i);
+  }
   assert.doesNotMatch(source('cart.html'), /fbq|fbevents|facebook\.com\/tr/i);
+});
+
+test('3.5 percent applies to the combined quantity across warehouses without rounding the label', () => {
+  const { sandbox: s } = createContext();
+  const items = [item({ quantity: 6, price: 10 }), item({ name: 'IL-B001', warehouse: 'IL', quantity: 5, price: 10 })];
+  const message = s.buildWhatsAppOrderMessage(items, vm.runInContext('discountTiers', s));
+  assert.match(message, /Total Quantity: 11 pcs/);
+  assert.match(message, /Discount \(3\.5%\): -\$3\.85/);
+  assert.match(message, /Total Amount \(excl\. shipping\):\* \$106\.15/);
+});
+
+test('unnamed sheet columns are ignored but duplicate named columns still fail', () => {
+  const { sandbox: s } = createContext();
+  const [row] = s.parseCSV('sku,brand,name,target,price,ml,stock,hot_selling_weight,new_arrival_weight,coming_soon_weight,image_url,sku2,,\nIL-B001,Louis Vuitton,Afternoon Swim,Unisex,42,100,175,,,,photo.webp,午后漫游,,10');
+  assert.equal(row.id, 'IL-B001');
+  assert.equal(row.price, 42);
+  assert.equal(row.stock, 175);
+  assert.equal(row.warehouse, 'IL');
+  assert.equal(Object.hasOwn(row, ''), false);
+  assert.throws(() => s.parseCSV('sku,name,price,price\nIL-B001,Swim,42,52'), /Duplicate product columns/);
 });
 
 test('Escape closes the enlarged product card without reacting to other keys', () => {
@@ -266,8 +305,11 @@ test('fresh checkout requests bypass cache and reject bad or duplicate data', as
   memory.set('perfumeDB_BestProducts_Catalog_Last_Valid_Data_V13', JSON.stringify([product({ price: 1 })]));
   await assert.rejects(() => s.fetchLatestProductData(), /offline/);
   let fetchOptions;
-  s.fetch = async (_url, options) => { fetchOptions = options; return { ok: true, text: async () => csvFor(product()) }; };
+  let fetchUrl;
+  s.fetch = async (url, options) => { fetchUrl = url; fetchOptions = options; return { ok: true, text: async () => csvFor(product()) }; };
   assert.equal((await s.fetchLatestProductData())[0].price, 33);
+  assert.match(fetchUrl, /2PACX-1vSaFTXofUSG63pjWela7csIA57AcA6rqrhb26_p_NKQ73P8ofYD3Ec4JDqGPVEUv6Fe3HWDpsj8ldaE\/pub\?gid=0&single=true&output=csv/);
+  assert.ok(memory.has('perfumeDB_BestProducts_Catalog_Data_V14'));
   assert.equal(fetchOptions.cache, 'no-store');
   assert.ok(fetchOptions.signal);
   for (const bad of ['id,name\nA,Name', csvFor(product()) + '\n' + csvFor(product()).split('\n')[1]]) {
