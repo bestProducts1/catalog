@@ -10,13 +10,8 @@ const CACHE_DURATION = 1 * 60 * 1000;
 const PRODUCT_CACHE_KEY = "perfumeDB_BestProducts_Catalog_Data_V14";
 const PRODUCT_TIME_KEY = "perfumeDB_BestProducts_Catalog_Time_V14";
 const PRODUCT_FALLBACK_KEY = "perfumeDB_BestProducts_Catalog_Last_Valid_Data_V14";
-const CATALOG_DISCOUNT_TIERS = [
-  { min: 1, max: 10, percent: 0 },
-  { min: 11, max: 20, percent: 0.035 },
-  { min: 21, max: 40, percent: 0.08 },
-  { min: 41, max: Infinity, percent: 0.12 },
-];
-const SHIPPING_LABEL = "Calculated Separately";
+const CATALOG_DISCOUNT_TIERS = window.STOREFRONT_CONFIG.discountTiers;
+const SHIPPING_LABEL = window.STOREFRONT_CONFIG.shippingLabel;
 const CART_STORAGE_KEY = "bestProducts1SharedCartV3";
 const CART_RESET_KEY = "bestProducts1SharedCartResetV3";
 const MIN_ORDER_STOCK = 19;
@@ -191,6 +186,8 @@ function getOrderStockLimit(product) {
     "LOW / HIDDEN",
   ].includes(status);
   if (unavailable || !Number.isFinite(price) || price <= 0) return 0;
+  const comingSoonWeight = Number(product?.coming_soon_weight);
+  if (Number.isFinite(comingSoonWeight) && comingSoonWeight > 0 && !(stock >= MIN_ORDER_STOCK)) return 0;
   if (Number.isFinite(stock)) {
     return stock >= MIN_ORDER_STOCK ? Math.floor(stock) : 0;
   }
